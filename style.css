@@ -1,0 +1,71 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    /* Fundo imitando uma parede escura iluminada sutilmente pelo centro */
+    background-color: #121212;
+    background-image: radial-gradient(circle at 50% 40%, #2a2e35 0%, #0a0a0c 80%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#game-container {
+    width: 800px;
+    height: 600px;
+    position: relative;
+    border-radius: 6px; /* Cantos um pouco mais retos, padrão de monitores gamers */
+    overflow: hidden;
+    
+    /* Céu atmosférico mais denso e realista */
+    background: linear-gradient(180deg, #0e294b 0%, #3a7bd5 40%, #a1d6e2 100%);
+    
+    /* Múltiplas sombras para simular o monitor e a luz interagindo com a mesa */
+    box-shadow: 
+        inset 0 0 20px rgba(0, 0, 0, 0.8),    /* Profundidade interna (distância entre vidro e painel) */
+        0 0 0 10px #080808,                   /* Plástico fosco do monitor (Bezel) */
+        0 0 0 11px #333333,                   /* Um micro-filete de luz batendo na quina do monitor */
+        0 30px 60px rgba(0, 0, 0, 0.9),       /* Sombra física super pesada projetada na mesa */
+        0 80px 140px -20px rgba(58, 123, 213, 0.4); /* O reflexo da tela na mesa abaixo (Ambilight) */
+}
+
+/* EFEITO 1: O Reflexo do Vidro (Glare) */
+#game-container::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    /* Cria um "corte" de luz diagonal típico de luzes rebatendo em telas */
+    background: linear-gradient(
+        135deg, 
+        rgba(255, 255, 255, 0.1) 0%, 
+        rgba(255, 255, 255, 0.03) 45%, 
+        rgba(255, 255, 255, 0) 46%
+    );
+    z-index: 10;
+    /* REGRA DE OURO: pointer-events: none impede que esse reflexo bloqueie os cliques do mouse no jogo */
+    pointer-events: none; 
+}
+
+/* EFEITO 2: Vinheta da Lente/Tela (Vignette) */
+#game-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    /* Escurece os cantos suavemente, dando um ar cinematográfico */
+    box-shadow: inset 0 0 100px rgba(0,0,0,0.6);
+    z-index: 9;
+    pointer-events: none;
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* Otimização de cor simulando HDR de monitores modernos */
+    filter: contrast(1.15) brightness(0.95) saturate(1.2);
+}
