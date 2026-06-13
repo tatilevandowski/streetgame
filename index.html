@@ -2,14 +2,88 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Street Numbers - Númerópolis</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Street Numbers - Numerópolis</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Varela+Round&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+        <!-- ===== Tela de Login / Escolha de Perfil ===== -->
+        <div id="authScreen" class="overlay">
+            <div class="card">
+                <h1>Street Numbers</h1>
+                <p class="subtitle">Numerópolis</p>
+
+                <div id="roleChoice">
+                    <p class="prompt">Quem está jogando?</p>
+                    <button id="roleStudent" class="bigbtn">👦 Sou Aluno</button>
+                    <button id="roleTeacher" class="bigbtn alt">👩‍🏫 Sou Professor</button>
+                </div>
+
+                <form id="studentForm" class="authForm hidden">
+                    <p class="prompt">Acesso do Aluno</p>
+                    <label for="studentUser">Nome de usuário:</label>
+                    <input id="studentUser" type="text" maxlength="24" autocomplete="off" placeholder="Seu nome">
+                    <label for="studentPass">Senha:</label>
+                    <input id="studentPass" type="password" autocomplete="off" placeholder="Senha">
+                    <button type="submit">Entrar e jogar</button>
+                    <button type="button" id="studentRegister" class="secondary">Cadastrar novo aluno</button>
+                    <button type="button" class="link back">← Voltar</button>
+                    <p id="studentHint" class="hint"></p>
+                </form>
+
+                <form id="teacherForm" class="authForm hidden">
+                    <p class="prompt">Acesso do Professor</p>
+                    <label for="teacherUser">Nome de usuário:</label>
+                    <input id="teacherUser" type="text" maxlength="24" autocomplete="off" placeholder="Usuário">
+                    <label for="teacherPass">Senha:</label>
+                    <input id="teacherPass" type="password" autocomplete="off" placeholder="Senha">
+                    <button type="submit" id="teacherSubmit">Entrar</button>
+                    <button type="button" id="teacherRegister" class="secondary">Cadastrar novo professor</button>
+                    <button type="button" class="link back">← Voltar</button>
+                    <p id="teacherHint" class="hint"></p>
+                </form>
+            </div>
+        </div>
+
+        <!-- ===== Painel do Professor ===== -->
+        <div id="teacherDashboard" class="overlay hidden">
+            <div class="dashcard">
+                <div class="dashhead">
+                    <h1>Painel do Professor</h1>
+                    <button id="teacherLogout">Sair</button>
+                </div>
+                <p class="muted">Acompanhamento da evolução dos alunos. Dados salvos neste dispositivo.</p>
+                <div id="studentList"></div>
+            </div>
+        </div>
+
+        <!-- Botão sair (trocar usuário) durante o jogo -->
+        <button id="exitBtn" aria-label="Trocar de usuário" title="Trocar de usuário">⤺ Sair</button>
+
+        <!-- Botão de acessibilidade / configurações -->
+        <button id="settingsBtn" aria-label="Abrir configurações de acessibilidade" title="Acessibilidade">⚙</button>
+
+        <!-- Painel de acessibilidade (GDD: ajustar som, contraste e tempo) -->
+        <div id="settingsPanel" class="hidden" role="dialog" aria-label="Configurações de acessibilidade">
+            <h2>Acessibilidade</h2>
+            <label><input type="checkbox" id="optSound"> Sons (acerto / erro)</label>
+            <label><input type="checkbox" id="optMusic"> Música de fundo</label>
+            <label><input type="checkbox" id="optContrast"> Alto contraste</label>
+            <label><input type="checkbox" id="optLargeFont"> Fonte grande</label>
+            <label><input type="checkbox" id="optExtraTime"> Tempo extra para responder</label>
+            <button id="settingsClose">Fechar</button>
+        </div>
+
+        <!-- Controles de toque (mobile / tablet) -->
+        <div id="touchControls">
+            <button id="btnLeft" aria-label="Mover para a esquerda">◀</button>
+            <button id="btnConfirm" aria-label="Confirmar resposta">OK</button>
+            <button id="btnRight" aria-label="Mover para a direita">▶</button>
+        </div>
     </div>
     <script src="game.js"></script>
 </body>
