@@ -69,3 +69,261 @@ canvas {
     /* Otimização de cor simulando HDR de monitores modernos */
     filter: contrast(1.15) brightness(0.95) saturate(1.2);
 }
+
+/* ===== Acessibilidade e controles (alinhado ao GDD/WDD/TDD) ===== */
+
+.hidden { display: none !important; }
+
+/* ===== Telas de Login e Painel do Professor ===== */
+.overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-family: 'Varela Round', sans-serif;
+    background: linear-gradient(180deg, #0e294b 0%, #3a7bd5 55%, #a1d6e2 100%);
+}
+
+.card {
+    width: 100%;
+    max-width: 360px;
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 18px;
+    padding: 28px 26px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.card h1 { color: #007B3A; font-size: 30px; }
+.card .subtitle { color: #5c99c4; font-size: 16px; margin-bottom: 22px; }
+.card .prompt { color: #333; font-size: 17px; margin-bottom: 16px; }
+
+.bigbtn {
+    display: block;
+    width: 100%;
+    margin: 10px 0;
+    padding: 16px;
+    border: none;
+    border-radius: 12px;
+    background: #007B3A;
+    color: #fff;
+    font-size: 18px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.08s;
+}
+.bigbtn.alt { background: #5A9BD4; }
+.bigbtn:hover { filter: brightness(1.05); }
+.bigbtn:active { transform: scale(0.98); }
+
+.authForm { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.authForm label { color: #333; font-size: 15px; }
+.authForm input {
+    padding: 13px;
+    border: 2px solid #c9d6cf;
+    border-radius: 10px;
+    font-size: 17px;
+    font-family: inherit;
+}
+.authForm input:focus { outline: none; border-color: #007B3A; }
+.authForm button[type="submit"] {
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: #007B3A;
+    color: #fff;
+    font-size: 17px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.authForm .secondary {
+    padding: 12px;
+    border: 2px solid #007B3A;
+    border-radius: 10px;
+    background: #fff;
+    color: #007B3A;
+    font-size: 15px;
+    font-family: inherit;
+    cursor: pointer;
+}
+.authForm .secondary:hover { background: #f0f7f3; }
+.authForm .link {
+    background: none;
+    border: none;
+    color: #5c99c4;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 4px;
+}
+.hint { font-size: 13px; color: #888; margin-top: 2px; }
+
+/* Painel do Professor */
+.dashcard {
+    width: 100%;
+    max-width: 720px;
+    max-height: 92%;
+    overflow-y: auto;
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 16px;
+    padding: 22px 24px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.dashhead { display: flex; justify-content: space-between; align-items: center; }
+.dashhead h1 { color: #007B3A; font-size: 24px; }
+#teacherLogout {
+    border: none;
+    border-radius: 8px;
+    background: #5A9BD4;
+    color: #fff;
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    cursor: pointer;
+}
+.muted { color: #888; font-size: 13px; margin: 6px 0 16px; }
+
+.student {
+    border: 1px solid #e2e8e5;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    background: #fafdfb;
+}
+.student .srow { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.student .srow strong { font-size: 17px; color: #333; }
+.student .srow span { font-size: 13px; color: #5c99c4; }
+.student .bars { margin: 10px 0 6px; }
+.barline { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; color: #444; }
+.barline .lbl { width: 110px; flex: none; }
+.barline .track { flex: 1; height: 12px; background: #e6ebe8; border-radius: 6px; overflow: hidden; }
+.barline .fill { height: 100%; background: #78C679; border-radius: 6px; }
+.barline .pct { width: 46px; flex: none; text-align: right; color: #333; }
+.student .meta { font-size: 12px; color: #999; margin-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.student .meta button {
+    border: none; background: #f0d4d4; color: #a33; border-radius: 6px;
+    padding: 5px 10px; font-family: inherit; font-size: 12px; cursor: pointer;
+}
+
+/* Botão sair durante o jogo */
+#exitBtn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 20;
+    display: none;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.85);
+    color: #333;
+    font-size: 14px;
+    font-family: 'Varela Round', sans-serif;
+    padding: 9px 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+#exitBtn:hover { background: #fff; }
+body.in-game #exitBtn { display: block; }
+
+/* Botão de configurações (engrenagem) */
+#settingsBtn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+    display: none;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.85);
+    color: #333;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+#settingsBtn:hover { background: #fff; }
+body.in-game #settingsBtn { display: block; }
+
+/* Painel de acessibilidade */
+#settingsPanel {
+    position: absolute;
+    top: 64px;
+    right: 12px;
+    z-index: 21;
+    width: 280px;
+    padding: 18px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    font-family: 'Varela Round', sans-serif;
+    color: #333;
+}
+#settingsPanel h2 {
+    font-size: 18px;
+    margin-bottom: 12px;
+    color: #007B3A;
+}
+#settingsPanel label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    padding: 8px 4px;
+    cursor: pointer;
+}
+#settingsPanel input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: #007B3A;
+    cursor: pointer;
+}
+#settingsClose {
+    margin-top: 12px;
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #007B3A;
+    color: #fff;
+    font-size: 15px;
+    font-family: inherit;
+    cursor: pointer;
+}
+#settingsClose:hover { background: #00692f; }
+
+/* Controles de toque: visíveis apenas em telas de toque (mobile/tablet) */
+#touchControls {
+    position: absolute;
+    bottom: 14px;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    display: none;
+    justify-content: center;
+    gap: 18px;
+    pointer-events: none;
+}
+#touchControls button {
+    pointer-events: auto;
+    width: 88px;
+    height: 88px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 123, 58, 0.9);
+    color: #fff;
+    font-size: 34px;
+    font-weight: bold;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    user-select: none;
+}
+#touchControls button:active { background: #00692f; transform: scale(0.95); }
+
+@media (pointer: coarse) {
+    body.in-game #touchControls { display: flex; }
+}
