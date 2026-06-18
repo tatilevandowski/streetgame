@@ -3,9 +3,9 @@ const ctx = canvas.getContext('2d');
 
 // Configurações do Mundo
 const COLORS = {
-    sky: '#AEE2E5',
-    ground: '#A8D5BA',
-    road: '#D1D5D8',
+    sky: '#B6D8E6',
+    ground: '#AECB9D',
+    road: '#CFD2CF',
     roadLines: '#FFFFFF',
     numixBodyTop: '#99ccf2',
     numixBodyMain: '#7CB9E8',
@@ -353,6 +353,26 @@ function resetGame() {
     canvas.style.cursor = 'default';
 }
 
+// Salta direto para o início de um bairro/fase (0=Raiz, 1=Porcentagem, 2=Regra)
+function jumpToBairro(phaseIdx) {
+    const start = phaseIdx * 6;
+    if (start < 0 || start >= questionBank.length) return;
+    // Garante que o jogo esteja rodando (cobre intro e vitória)
+    if (gameState !== 'playing') {
+        ensureAudio();
+        if (settings.music) startMusic();
+        if (!session) startStudentSession();
+        speed = baseSpeed; particles = [];
+        gameState = 'playing';
+        canvas.style.cursor = 'default';
+    }
+    currentQuestionIndex = start;
+    isChallengeVisible = false; isWaitingForSelection = false; isAnswered = false; isHelpVisible = false;
+    praiseText = null; praiseTimer = 0;
+    challenge = { distanceY: 220, ...questionBank[start] };
+    nextChallengeAt = distanceDriven + 200; // próximo desafio aparece logo
+}
+
 function showPraise() {
     praiseText = praisePhrases[Math.floor(Math.random() * praisePhrases.length)];
     praiseTimer = 120; // ~2s a 60fps
@@ -442,48 +462,75 @@ function blendColors(c1, c2, ratio) {
     return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
 }
 
-// --- DESENHO DO AMBIENTE ---
+// Reparo da cidade: avança um pouco a CADA FASE (bairro), nunca regride.
+// Último valor < 1 garante que mesmo no fim reste alguma destruição.
+const PHASE_REPAIR = [0.2, 0.5, 0.8];
+function repairProgress() {
+    let phase = Math.min(2, Math.floor(currentQuestionIndex / 6));
+    return PHASE_REPAIR[phase];
+}
+function activePotholeCount() {
+    return Math.max(1, Math.ceil((1 - repairProgress()) * 3));
+}
+
+// --- DESENHO DO AMBIENTE (estética clay/massinha) ---
 function drawEnvironment() {
     let bairroPhase = Math.floor(currentQuestionIndex / 6);
     if (bairroPhase > 2) bairroPhase = 2;
 
-    let baseSkyColor = bairroPhase === 0 ? '#8899A6' : COLORS.sky;
-    let baseGroundColor = bairroPhase === 0 ? '#9E9E9E' : (bairroPhase === 1 ? '#A8C5B0' : COLORS.ground);
-    let baseRoadColor = bairroPhase === 0 ? '#696969' : (bairroPhase === 1 ? '#9E9E9E' : COLORS.road);
+    // Reparo contínuo (0 = destruído, MAX_REPAIR = quase recuperado)
+    let repairLevel = repairProgress();
 
-    let repairLevel = bairroPhase === 0 ? 0 : (bairroPhase === 1 ? 0.5 : 1);
+    // Cores interpolam de "destruído" (acinzentado) para "recuperado" (pastel) conforme o reparo
+    const skyTop = blendColors('#9DA9AE', '#9EC6DD', repairLevel);
+    const skyBot = blendColors('#BEC4C0', '#CFE3E0', repairLevel);
+    const groundCol = blendColors('#AEB6A0', COLORS.ground, repairLevel);
+    const roadCol = blendColors('#BDBFBB', COLORS.road, repairLevel);
 
-    let currentSky = baseSkyColor;
-    if (isAnswered) {
-        let selectedOption = challenge.options[challenge.chosenIndex];
-        currentSky = selectedOption.isCorrect ? '#C8E6C9' : '#FFCCBC';
-    }
-
-    ctx.fillStyle = currentSky;
+    // Céu (gradiente pastel) — sem flash ao responder; cor muda só ao trocar de fase
+    let g = ctx.createLinearGradient(0, 0, 0, 250);
+    g.addColorStop(0, skyTop); g.addColorStop(1, skyBot);
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, 250);
 
-    ctx.fillStyle = baseGroundColor;
+    // Skyline distante e desbotado (atrás de tudo)
+    ctx.fillStyle = 'rgba(150, 178, 175, 0.30)';
+    [[300, 55], [345, 90], [395, 50], [435, 75], [480, 60]].forEach(([bx, bh]) => {
+        ctx.beginPath(); ctx.roundRect(bx, 250 - bh, 38, bh, 6); ctx.fill();
+    });
+
+    // Grama + filete de luz no horizonte
+    ctx.fillStyle = groundCol;
     ctx.fillRect(0, 250, canvas.width, canvas.height - 250);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.fillRect(0, 250, canvas.width, 8);
 
-    ctx.fillStyle = baseRoadColor;
-    ctx.beginPath(); ctx.moveTo(350, 250); ctx.lineTo(450, 250); ctx.lineTo(800, 600); ctx.lineTo(0, 600); ctx.fill();
+    // Construções clay nas laterais, perto do horizonte (atrás das árvores)
+    drawClayBuilding(95, 250, 90, 116);
+    drawClayHouse(690, 250, 86, 64);
+    drawClayHouse(760, 262, 96, 74);
+    drawClayHouse(620, 244, 60, 48);
 
-    if (bairroPhase < 2) {
-        ctx.fillStyle = COLORS.pothole;
-        potholes.forEach(hole => {
-            hole.y += speed * 1.2;
-            if (hole.y > 600) {
-                hole.y = 250;
-                hole.x = 350 + Math.random() * 100;
-            }
-            let scale = Math.max((hole.y - 250) / 350, 0.1);
-            ctx.beginPath();
-            ctx.ellipse(hole.x, hole.y, hole.size * scale, (hole.size/2) * scale, 0, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }
+    // Estrada (trapézio em perspectiva)
+    ctx.fillStyle = roadCol;
+    ctx.beginPath(); ctx.moveTo(350, 250); ctx.lineTo(450, 250); ctx.lineTo(800, 600); ctx.lineTo(0, 600); ctx.closePath(); ctx.fill();
 
-    ctx.fillStyle = COLORS.roadLines;
+    // Buracos: quantidade cai com o reparo, mas nunca zera (resta destruição até o fim)
+    ctx.fillStyle = COLORS.pothole;
+    potholes.slice(0, activePotholeCount()).forEach(hole => {
+        hole.y += speed * 1.2;
+        if (hole.y > 600) {
+            hole.y = 250;
+            hole.x = 350 + Math.random() * 100;
+        }
+        let scale = Math.max((hole.y - 250) / 350, 0.1);
+        ctx.beginPath();
+        ctx.ellipse(hole.x, hole.y, hole.size * scale, (hole.size/2) * scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // Faixa central tracejada (clay, cantos arredondados)
+    ctx.fillStyle = '#F4F2EA';
     if (gameState === 'playing') roadOffset += speed * 2;
     if (roadOffset > 80) roadOffset = 0;
 
@@ -491,7 +538,7 @@ function drawEnvironment() {
         let y = 250 + (i * 80) + roadOffset;
         if (y > 250 && y < 600) {
             let width = (y - 250) * 0.05; let height = (y - 250) * 0.2;
-            ctx.fillRect(398 - width/2, y, width, height);
+            ctx.beginPath(); ctx.roundRect(398 - width/2, y, Math.max(width, 2), height, 3); ctx.fill();
         }
     }
 
@@ -500,10 +547,6 @@ function drawEnvironment() {
     drawTree(120, 320, 0.7, repairLevel); drawTree(680, 330, 0.7, repairLevel);
     drawTree(80, 420, 1.0, repairLevel); drawTree(750, 440, 1.1, repairLevel);
     drawTree(30, 580, 1.5, repairLevel); drawTree(780, 560, 1.6, repairLevel);
-
-    if (bairroPhase < 2 && gameState !== 'victory') {
-        drawScatteredNumbers(repairLevel);
-    }
 }
 
 function drawScatteredNumbers(repairLevel) {
@@ -637,15 +680,12 @@ function drawNumix() {
     if (keys.ArrowRight && gameState === 'playing') tilt = 0.08;
     ctx.rotate(tilt);
 
-    let bairroPhase = Math.floor(currentQuestionIndex / 6);
     let isBumpy = false;
-    if (bairroPhase < 2) {
-        potholes.forEach(hole => {
-            if (hole.y > cy && hole.y < cy + h && Math.abs(hole.x - cx) < 50) {
-                isBumpy = true;
-            }
-        });
-    }
+    potholes.slice(0, activePotholeCount()).forEach(hole => {
+        if (hole.y > cy && hole.y < cy + h && Math.abs(hole.x - cx) < 50) {
+            isBumpy = true;
+        }
+    });
     if (isBumpy && speed > 0) ctx.translate(0, (Math.random() - 0.5) * 4);
 
     drawNumixShape();
@@ -676,24 +716,29 @@ function drawChallenge() {
     const hc = settings.highContrast;
     const signX = 220; const signY = 15; const signW = 360; const signH = 65;
 
-    ctx.fillStyle = '#999999'; ctx.beginPath(); ctx.roundRect(signX - 4, signY - 4, signW + 8, signH + 8, 12); ctx.fill();
-    ctx.fillStyle = '#007B3A'; ctx.beginPath(); ctx.roundRect(signX, signY, signW, signH, 8); ctx.fill();
+    // Placa-título estilo lousa (clay): sombra suave + moldura + tampo verde + borda de giz
+    ctx.fillStyle = 'rgba(60, 80, 70, 0.22)';
+    ctx.beginPath(); ctx.roundRect(signX - 6, signY + 2, signW + 12, signH + 12, 16); ctx.fill();
+    ctx.fillStyle = hc ? '#0b3d22' : '#4E7A5C';
+    ctx.beginPath(); ctx.roundRect(signX - 6, signY - 6, signW + 12, signH + 12, 16); ctx.fill();
+    ctx.fillStyle = hc ? '#063318' : '#3C6048';
+    ctx.beginPath(); ctx.roundRect(signX, signY, signW, signH, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(signX + 6, signY + 6, signW - 12, signH - 12, 6); ctx.stroke();
 
-    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(signX + 5, signY + 5, signW - 10, signH - 10, 5); ctx.stroke();
-
-    const drawScrew = (sx, sy) => {
-        ctx.fillStyle = '#CCCCCC'; ctx.beginPath(); ctx.arc(sx, sy, 3, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#444444'; ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, Math.PI * 2); ctx.fill();
-    };
-    drawScrew(signX + 15, signY + 15); drawScrew(signX + signW - 15, signY + 15);
-    drawScrew(signX + 15, signY + signH - 15); drawScrew(signX + signW - 15, signY + signH - 15);
-
-    ctx.fillStyle = '#FFFFFF'; ctx.font = `bold ${22 * fontScale()}px Arial, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#F4F2EA'; ctx.font = `bold ${22 * fontScale()}px Varela Round`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(challenge.title, 400, signY + (signH / 2));
 
-    ctx.fillStyle = hc ? '#063d20' : COLORS.signBg; ctx.beginPath(); ctx.roundRect(330, 105, 140, 50, 10); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.font = `bold ${24 * fontScale()}px Varela Round`; ctx.textBaseline = 'alphabetic';
-    ctx.fillText(challenge.question, 400, 138);
+    // Lousa da pergunta (clay)
+    ctx.fillStyle = 'rgba(60, 80, 70, 0.20)';
+    ctx.beginPath(); ctx.roundRect(325, 103, 150, 56, 12); ctx.fill();
+    ctx.fillStyle = hc ? '#063d20' : '#6FA07C';
+    ctx.beginPath(); ctx.roundRect(325, 100, 150, 56, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(331, 106, 138, 44, 7); ctx.stroke();
+    ctx.fillStyle = '#F4F2EA'; ctx.font = `bold ${24 * fontScale()}px Varela Round`; ctx.textBaseline = 'middle';
+    ctx.fillText(challenge.question, 400, 130);
+    ctx.textBaseline = 'alphabetic';
 
     if (!isAnswered && !isWaitingForSelection && gameState === 'playing') {
         challenge.distanceY += speed * 0.8 * timeFactor();
@@ -709,13 +754,19 @@ function drawChallenge() {
         let boxWidth = 90 * scale, boxHeight = 70 * scale, xPos = optionXs[index];
         ctx.save(); ctx.translate(xPos, challenge.distanceY);
 
+        // Sombra de contato suave (clay)
+        ctx.fillStyle = 'rgba(60, 80, 70, 0.22)';
+        ctx.beginPath(); ctx.ellipse(0, boxHeight/2 + 6 * scale, boxWidth * 0.55, 7 * scale, 0, 0, Math.PI * 2); ctx.fill();
+
         if (isWaitingForSelection && currentIndex === index) {
-            ctx.fillStyle = COLORS.highlight; ctx.beginPath(); ctx.roundRect(-boxWidth/2 - 4, -boxHeight/2 - 4, boxWidth + 8, boxHeight + 8, 8); ctx.fill();
+            ctx.fillStyle = COLORS.highlight; ctx.beginPath(); ctx.roundRect(-boxWidth/2 - 5, -boxHeight/2 - 5, boxWidth + 10, boxHeight + 10, 12); ctx.fill();
         }
 
-        ctx.fillStyle = hc ? '#FFFFFF' : COLORS.boxBg; ctx.beginPath(); ctx.roundRect(-boxWidth/2, -boxHeight/2, boxWidth, boxHeight, 5); ctx.fill();
-        if (hc) { ctx.strokeStyle = '#222'; ctx.lineWidth = 3; ctx.stroke(); }
-        ctx.fillStyle = hc ? '#111' : '#FFF'; ctx.font = `bold ${35 * scale * fontScale()}px Varela Round`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillText(opt.value, 0, 0);
+        ctx.fillStyle = hc ? '#FFFFFF' : COLORS.boxBg; ctx.beginPath(); ctx.roundRect(-boxWidth/2, -boxHeight/2, boxWidth, boxHeight, 12); ctx.fill();
+        // Borda branca arredondada (placa de massinha)
+        ctx.strokeStyle = hc ? '#222' : 'rgba(255,255,255,0.85)'; ctx.lineWidth = (hc ? 3 : 3) * Math.max(scale, 0.4);
+        ctx.beginPath(); ctx.roundRect(-boxWidth/2 + 2, -boxHeight/2 + 2, boxWidth - 4, boxHeight - 4, 10); ctx.stroke();
+        ctx.fillStyle = hc ? '#111' : '#F4F2EA'; ctx.font = `bold ${35 * scale * fontScale()}px Varela Round`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillText(opt.value, 0, 0);
 
         if (isAnswered && challenge.chosenIndex === index) {
             ctx.font = `bold ${45 * scale}px Varela Round`; ctx.fillStyle = opt.isCorrect ? '#2e8b3d' : '#d64545'; ctx.fillText(opt.isCorrect ? "✓" : "✗", boxWidth/2, -boxHeight/2);
@@ -726,8 +777,17 @@ function drawChallenge() {
 
 function drawUI() {
     const hc = settings.highContrast;
+    // Progresso no canto superior direito, em pílula clara (à esquerda do botão de engrenagem)
     let label = (currentStudentName ? currentStudentName + " • " : "") + `Progresso: ${score} / ${questionBank.length}`;
-    ctx.fillStyle = hc ? '#000' : '#333'; ctx.font = `bold ${16 * fontScale()}px Varela Round`; ctx.textAlign = 'left'; ctx.fillText(label, 110, 28);
+    ctx.font = `bold ${16 * fontScale()}px Varela Round`;
+    const pad = 12, rightEdge = 730, tw = ctx.measureText(label).width;
+    const pillW = tw + pad * 2, pillH = 30 * fontScale(), pillX = rightEdge - pillW, pillY = 12;
+    ctx.fillStyle = hc ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.82)';
+    ctx.beginPath(); ctx.roundRect(pillX, pillY, pillW, pillH, 10); ctx.fill();
+    ctx.fillStyle = hc ? '#fff' : '#33513f';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, rightEdge - pad, pillY + pillH / 2);
+    ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'center'; ctx.fillStyle = hc ? '#000' : '#555';
     if (isWaitingForSelection && gameState === 'playing') {
         ctx.font = `bold ${20 * fontScale()}px Varela Round`; ctx.fillText("Escolha com ← → e aperte ESPAÇO / OK", 400, 560);
@@ -921,55 +981,209 @@ function drawVictoryScreen() {
     ctx.fillStyle = '#333'; ctx.font = `bold ${20 * fontScale()}px Varela Round`; ctx.fillText("Recomeçar", 400, restartBtn.y + 30);
 }
 
+// --- Prédios/casas estilo "massinha" (clay) para a abertura ---
+function drawClayShadow(x, y, w) {
+    ctx.save();
+    let s = ctx.createRadialGradient(x, y, 4, x, y, w);
+    s.addColorStop(0, 'rgba(60, 80, 70, 0.28)');
+    s.addColorStop(1, 'rgba(60, 80, 70, 0)');
+    ctx.fillStyle = s;
+    ctx.beginPath(); ctx.ellipse(x, y, w, w * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+}
+
+function drawClayBuilding(x, baseY, w, h) {
+    drawClayShadow(x, baseY + 4, w * 0.75);
+    // corpo
+    ctx.fillStyle = '#D9C7A0';
+    ctx.beginPath(); ctx.roundRect(x - w / 2, baseY - h, w, h, 8); ctx.fill();
+    // lado sombreado (volume)
+    ctx.fillStyle = 'rgba(120, 100, 70, 0.18)';
+    ctx.beginPath(); ctx.roundRect(x + w / 2 - w * 0.22, baseY - h, w * 0.22, h, { tl: 0, tr: 8, br: 8, bl: 0 }); ctx.fill();
+    // topo/laje
+    ctx.fillStyle = '#C9B68C';
+    ctx.beginPath(); ctx.roundRect(x - w / 2 - 3, baseY - h - 8, w + 6, 14, 5); ctx.fill();
+    // janelas
+    ctx.fillStyle = '#6FA0C0';
+    let cols = 3, rows = 3, gap = w / (cols + 1), gy = (h - 30) / rows;
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        ctx.beginPath(); ctx.roundRect(x - w / 2 + gap * (c + 1) - 9, baseY - h + 14 + gy * r, 18, 22, 4); ctx.fill();
+    }
+    // porta
+    ctx.fillStyle = '#5A89A8';
+    ctx.beginPath(); ctx.roundRect(x - 14, baseY - 34, 28, 34, { tl: 6, tr: 6, br: 0, bl: 0 }); ctx.fill();
+}
+
+function drawClayHouse(x, baseY, w, h) {
+    drawClayShadow(x, baseY + 4, w * 0.8);
+    // corpo
+    ctx.fillStyle = '#D9C7A0';
+    ctx.beginPath(); ctx.roundRect(x - w / 2, baseY - h, w, h, 8); ctx.fill();
+    ctx.fillStyle = 'rgba(120, 100, 70, 0.18)';
+    ctx.beginPath(); ctx.roundRect(x + w / 2 - w * 0.24, baseY - h, w * 0.24, h, { tl: 0, tr: 8, br: 8, bl: 0 }); ctx.fill();
+    // telhado
+    ctx.fillStyle = '#5C8AA6';
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2 - 8, baseY - h + 6);
+    ctx.lineTo(x, baseY - h - 36);
+    ctx.lineTo(x + w / 2 + 8, baseY - h + 6);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath();
+    ctx.moveTo(x, baseY - h - 36); ctx.lineTo(x + w / 2 + 8, baseY - h + 6); ctx.lineTo(x, baseY - h + 6); ctx.closePath(); ctx.fill();
+    // janelas + porta
+    ctx.fillStyle = '#6FA0C0';
+    ctx.beginPath(); ctx.roundRect(x - w / 2 + 12, baseY - h + 16, 20, 24, 4); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(x + w / 2 - 32, baseY - h + 16, 20, 24, 4); ctx.fill();
+    ctx.fillStyle = '#5A89A8';
+    ctx.beginPath(); ctx.roundRect(x - 12, baseY - 32, 24, 32, { tl: 6, tr: 6, br: 0, bl: 0 }); ctx.fill();
+}
+
+// Texto branco "massinha" (relevo suave) para título e números flutuantes
+function drawClayText(text, x, y, size, weight) {
+    ctx.save();
+    ctx.font = `${weight || 'bold'} ${size}px Varela Round`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // sombra de contato suave
+    ctx.fillStyle = 'rgba(70, 95, 110, 0.25)';
+    ctx.fillText(text, x + size * 0.04, y + size * 0.07);
+    // base
+    ctx.fillStyle = '#F3F1E9';
+    ctx.fillText(text, x, y);
+    // realce no topo
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillText(text, x, y - size * 0.03);
+    ctx.restore();
+}
+
+// --- FUNDO DA TELA DE LOGIN (números espalhados + Prof. Sigma) ---
+function drawAuthScene() {
+    splashFrame++;
+
+    // Céu pastel + faixa de grama embaixo (mesma cena clay do jogo)
+    let g = ctx.createLinearGradient(0, 0, 0, 600);
+    g.addColorStop(0, '#9EC6DD'); g.addColorStop(0.42, '#B6D8E6');
+    g.addColorStop(0.70, '#CFE3E0'); g.addColorStop(0.7001, '#AECB9D'); g.addColorStop(1, '#A6C497');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 800, 600);
+
+    // Nuvens
+    drawCloud(120, 90, 30); drawCloud(680, 80, 34); drawCloud(400, 60, 22);
+
+    // Números e símbolos espalhados (suaves, estilo massinha)
+    const nums = [
+        { x: 70, y: 160, v: '7', s: 60, r: -0.20 }, { x: 730, y: 140, v: '3', s: 66, r: 0.22 },
+        { x: 60, y: 470, v: '√', s: 52, r: 0.15 }, { x: 745, y: 300, v: '%', s: 50, r: -0.18 },
+        { x: 150, y: 300, v: '8', s: 46, r: 0.10 }, { x: 655, y: 470, v: '5', s: 58, r: -0.12 },
+        { x: 720, y: 525, v: '=', s: 44, r: 0.10 }, { x: 700, y: 200, v: '4', s: 46, r: 0.18 },
+        { x: 400, y: 120, v: '+', s: 40, r: 0.15 }, { x: 110, y: 220, v: '9', s: 42, r: -0.15 }
+    ];
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let bob = Math.sin(splashFrame * 0.04) * 2;
+    nums.forEach((n, i) => {
+        ctx.save();
+        ctx.translate(n.x, n.y + (i % 2 ? bob : -bob));
+        ctx.rotate(n.r);
+        ctx.font = `bold ${n.s}px Varela Round`;
+        ctx.fillStyle = 'rgba(244,242,234,0.55)'; ctx.fillText(n.v, 2, 3);
+        ctx.fillStyle = 'rgba(70,120,150,0.30)'; ctx.fillText(n.v, 0, 0);
+        ctx.restore();
+    });
+
+    // Professor Sigma (canto inferior esquerdo)
+    ctx.save();
+    ctx.translate(108, 460); ctx.scale(2.2, 2.2); ctx.rotate(-Math.PI / 16);
+    drawSigmaShape();
+    ctx.restore();
+    ctx.fillStyle = '#3C6048'; ctx.font = 'bold 15px Varela Round'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Prof. Sigma', 108, 560);
+
+    // Numix (canto inferior direito)
+    ctx.save();
+    ctx.translate(700, 500); ctx.scale(1.15, 1.15);
+    drawNumixShape();
+    ctx.restore();
+}
+
 // --- TELA DE ABERTURA (splash, antes do login) ---
 function drawSplash() {
     splashFrame++;
 
-    // Fundo azul pastel bem clarinho
+    // Céu pastel (clay)
     let g = ctx.createLinearGradient(0, 0, 0, 600);
-    g.addColorStop(0, '#EAF4FF'); g.addColorStop(0.55, '#DCEEFF'); g.addColorStop(1, '#CFE7FB');
+    g.addColorStop(0, '#9EC6DD'); g.addColorStop(0.55, '#B6D8E6'); g.addColorStop(1, '#CFE3E0');
     ctx.fillStyle = g; ctx.fillRect(0, 0, 800, 600);
 
-    // Números espalhados (suaves)
-    const nums = [
-        { x: 90, y: 120, v: '7', s: 54, r: -0.2 }, { x: 700, y: 110, v: '3', s: 60, r: 0.25 },
-        { x: 150, y: 470, v: '9', s: 50, r: 0.15 }, { x: 660, y: 500, v: '5', s: 64, r: -0.18 },
-        { x: 400, y: 70, v: '1', s: 40, r: 0.1 }, { x: 55, y: 300, v: '4', s: 44, r: 0.3 },
-        { x: 745, y: 320, v: '8', s: 46, r: -0.25 }, { x: 300, y: 545, v: '2', s: 38, r: 0.2 },
-        { x: 520, y: 150, v: '6', s: 42, r: -0.15 }, { x: 230, y: 200, v: '%', s: 40, r: 0.1 },
-        { x: 560, y: 525, v: '√', s: 46, r: -0.1 }, { x: 470, y: 470, v: '=', s: 38, r: 0.15 }
-    ];
-    ctx.fillStyle = 'rgba(90, 155, 212, 0.28)';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    nums.forEach(n => {
-        ctx.save(); ctx.translate(n.x, n.y); ctx.rotate(n.r);
-        ctx.font = `bold ${n.s}px Varela Round`; ctx.fillText(n.v, 0, 0);
-        ctx.restore();
+    // Skyline distante (prédios desfocados, bem claros)
+    ctx.fillStyle = 'rgba(150, 180, 175, 0.35)';
+    [[330, 60], [380, 95], [430, 55], [470, 80]].forEach(([bx, bh]) => {
+        ctx.beginPath(); ctx.roundRect(bx, 360 - bh, 40, bh, 6); ctx.fill();
     });
 
-    // Logo "Street Numbers" em azul
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.font = 'bold 66px Varela Round';
-    ctx.fillStyle = '#0a2a52'; ctx.fillText('Street', 403, 203);
-    ctx.fillStyle = '#1E90FF'; ctx.fillText('Street', 400, 200);
-    ctx.fillStyle = '#0a2a52'; ctx.fillText('Numbers', 403, 273);
-    ctx.fillStyle = '#3FA9F5'; ctx.fillText('Numbers', 400, 270);
-    ctx.font = '22px Varela Round'; ctx.fillStyle = '#3a6ea5';
-    ctx.fillText('Numerópolis', 400, 308);
+    // Grama
+    ctx.fillStyle = COLORS.ground;
+    ctx.fillRect(0, 360, 800, 240);
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0, 360, 800, 10);
 
-    // Numix
-    ctx.save(); ctx.translate(400, 425); ctx.scale(1.5, 1.5); drawNumixShape(); ctx.restore();
+    // Estrada (trapézio recuando ao horizonte)
+    ctx.fillStyle = COLORS.road;
+    ctx.beginPath();
+    ctx.moveTo(355, 360); ctx.lineTo(445, 360); ctx.lineTo(660, 600); ctx.lineTo(140, 600);
+    ctx.closePath(); ctx.fill();
+
+    // Faixa tracejada central (perspectiva)
+    ctx.fillStyle = '#F4F2EA';
+    for (let i = 0; i < 6; i++) {
+        let t = i / 6;
+        let y = 360 + t * 240;
+        let w = 4 + t * 22, hh = 8 + t * 28;
+        ctx.beginPath(); ctx.roundRect(400 - w / 2, y, w, hh, 3); ctx.fill();
+    }
+
+    // Nuvens
+    drawCloud(150, 430, 26); drawCloud(640, 415, 30); drawCloud(400, 400, 20);
+
+    // Árvores e construções nas laterais (atrás, sobre a grama)
+    drawTree(60, 400, 1.0, 1); drawTree(745, 405, 1.1, 1);
+    drawClayBuilding(180, 360, 150, 150);
+    drawClayHouse(640, 360, 165, 120);
+    drawTree(330, 392, 0.7, 1); drawTree(560, 392, 0.7, 1);
+
+    // Placa NUMERÓPOLIS (verde, no horizonte)
+    ctx.save();
+    ctx.fillStyle = '#7FB58C';
+    ctx.beginPath(); ctx.roundRect(335, 332, 130, 26, 6); ctx.fill();
+    ctx.strokeStyle = '#F4F2EA'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(339, 336, 122, 18, 4); ctx.stroke();
+    ctx.fillStyle = '#F4F2EA'; ctx.font = 'bold 13px Varela Round';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('NUMERÓPOLIS', 400, 346);
+    ctx.restore();
+
+    // Numix (carro) na estrada
+    ctx.save(); ctx.translate(400, 500); ctx.scale(1.7, 1.7); drawNumixShape(); ctx.restore();
+
+    // Números flutuantes "massinha" nas laterais
+    let bob = Math.sin(splashFrame * 0.04) * 4;
+    drawClayText('2+3', 150, 470 + bob, 58);
+    drawClayText('4×5', 660, 470 - bob, 58);
+
+    // Título "STREET NUMBERS"
+    drawClayText('STREET', 400, 110, 78);
+    drawClayText('NUMBERS', 400, 195, 78);
 
     // Chamada (pisca suavemente)
     let alpha = 0.55 + 0.45 * Math.sin(splashFrame * 0.05);
     ctx.font = 'bold 20px Varela Round';
-    ctx.fillStyle = `rgba(46, 90, 138, ${alpha.toFixed(3)})`;
-    ctx.fillText('Toque ou pressione qualquer tecla para começar', 400, 565);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = `rgba(40, 70, 90, ${alpha.toFixed(3)})`;
+    ctx.fillText('Toque ou pressione qualquer tecla para começar', 400, 580);
 }
 
 function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (appView === 'splash') { drawSplash(); requestAnimationFrame(loop); return; }
+    if (appView === 'auth') { drawAuthScene(); requestAnimationFrame(loop); return; }
     updatePhysics();
     drawEnvironment();
     if (gameState === 'intro') {
@@ -998,6 +1212,28 @@ function setupUI() {
 
     $('settingsBtn').addEventListener('click', () => { ensureAudio(); panel.classList.toggle('hidden'); });
     $('settingsClose').addEventListener('click', () => panel.classList.add('hidden'));
+
+    // Painel de fases: destaca a fase atual ao abrir e salta ao clicar
+    const phasesPanel = $('phasesPanel');
+    const markCurrentPhase = () => {
+        const cur = Math.min(2, Math.floor(currentQuestionIndex / 6));
+        phasesPanel.querySelectorAll('.phaseOpt').forEach(b => {
+            b.classList.toggle('current', Number(b.getAttribute('data-phase')) === cur);
+        });
+    };
+    $('phasesBtn').addEventListener('click', () => {
+        ensureAudio();
+        panel.classList.add('hidden');
+        markCurrentPhase();
+        phasesPanel.classList.toggle('hidden');
+    });
+    $('phasesClose').addEventListener('click', () => phasesPanel.classList.add('hidden'));
+    phasesPanel.querySelectorAll('.phaseOpt').forEach(btn => {
+        btn.addEventListener('click', () => {
+            jumpToBairro(Number(btn.getAttribute('data-phase')));
+            phasesPanel.classList.add('hidden');
+        });
+    });
 
     $('optSound').addEventListener('change', (e) => { settings.sound = e.target.checked; saveSettings(); });
     $('optMusic').addEventListener('change', (e) => {
