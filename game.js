@@ -43,7 +43,8 @@ function feedbackDelay() { return settings.extraTime ? 3800 : 2500; }
 
 // --- Perfis e progresso (TDD: perfil local Aluno/Professor + acompanhamento) ---
 // Contas de aluno e professor, com usuário + senha. Chave normalizada evita duplicar por maiúsculas.
-let appView = 'auth'; // 'auth' | 'student' | 'teacher'
+let appView = 'splash'; // 'splash' | 'auth' | 'student' | 'teacher'
+let splashFrame = 0;
 let currentStudentKey = null;  // chave do aluno logado (para o banco)
 let currentStudentName = null; // nome de exibição do aluno logado
 let session = null; // sessão de jogo atual do aluno (referência dentro do registro)
@@ -271,6 +272,7 @@ const numix = { x: 400, y: 480, width: 120, height: 70 };
 const keys = { ArrowLeft: false, ArrowRight: false };
 
 window.addEventListener('keydown', (e) => {
+    if (appView === 'splash') { showAuth(); return; }
     if (appView !== 'student') return; // ignora teclas fora do jogo (login/painel)
     if (gameState === 'intro' && (e.key === ' ' || e.key === 'Enter')) { startGame(); return; }
     if (gameState !== 'playing') return;
@@ -293,6 +295,7 @@ function inRect(pos, r) {
 }
 
 canvas.addEventListener('click', (e) => {
+    if (appView === 'splash') { ensureAudio(); showAuth(); return; }
     const pos = getMousePos(canvas, e);
     if (gameState === 'intro') {
         if (inRect(pos, startBtn)) startGame();
@@ -311,6 +314,7 @@ canvas.addEventListener('click', (e) => {
 });
 
 canvas.addEventListener('mousemove', (e) => {
+    if (appView === 'splash') { canvas.style.cursor = 'pointer'; return; }
     const pos = getMousePos(canvas, e);
     let cursor = 'default';
 
@@ -566,30 +570,8 @@ function drawTree(x, y, scale, repairLevel) {
     ctx.restore();
 }
 
-function drawNumix() {
-    const cx = numix.x;
-    const cy = numix.y;
-    const h = numix.height;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    let tilt = 0;
-    if (keys.ArrowLeft && gameState === 'playing') tilt = -0.08;
-    if (keys.ArrowRight && gameState === 'playing') tilt = 0.08;
-    ctx.rotate(tilt);
-
-    let bairroPhase = Math.floor(currentQuestionIndex / 6);
-    let isBumpy = false;
-    if (bairroPhase < 2) {
-        potholes.forEach(hole => {
-            if (hole.y > cy && hole.y < cy + h && Math.abs(hole.x - cx) < 50) {
-                isBumpy = true;
-            }
-        });
-    }
-    if (isBumpy && speed > 0) ctx.translate(0, (Math.random() - 0.5) * 4);
-
+// Desenha a forma do Numix na origem atual do contexto (reusada na tela de abertura)
+function drawNumixShape() {
     ctx.save();
     let shadowGrd = ctx.createRadialGradient(0, 35, 10, 0, 35, 60);
     shadowGrd.addColorStop(0, 'rgba(0,0,0,0.3)');
@@ -640,6 +622,33 @@ function drawNumix() {
     ctx.beginPath(); ctx.arc(39, 1, 2, 0, Math.PI*2); ctx.fill();
 
     ctx.fillStyle = '#1A1A1A'; ctx.font = 'bold 13px Varela Round'; ctx.textAlign = 'center'; ctx.fillText("NUMIX", 0, 18);
+}
+
+function drawNumix() {
+    const cx = numix.x;
+    const cy = numix.y;
+    const h = numix.height;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    let tilt = 0;
+    if (keys.ArrowLeft && gameState === 'playing') tilt = -0.08;
+    if (keys.ArrowRight && gameState === 'playing') tilt = 0.08;
+    ctx.rotate(tilt);
+
+    let bairroPhase = Math.floor(currentQuestionIndex / 6);
+    let isBumpy = false;
+    if (bairroPhase < 2) {
+        potholes.forEach(hole => {
+            if (hole.y > cy && hole.y < cy + h && Math.abs(hole.x - cx) < 50) {
+                isBumpy = true;
+            }
+        });
+    }
+    if (isBumpy && speed > 0) ctx.translate(0, (Math.random() - 0.5) * 4);
+
+    drawNumixShape();
     ctx.restore();
 
     // Balão de incentivo do Numix (frases curtas)
@@ -727,16 +736,8 @@ function drawUI() {
     }
 }
 
-// --- DESENHO DO PROFESSOR SIGMA (ajuda) ---
-function drawHelpSystem() {
-    if (gameState !== 'playing') return;
-
-    ctx.save();
-    ctx.translate(pencilBtn.x + pencilBtn.width/2, pencilBtn.y + pencilBtn.height/2);
-    ctx.rotate(-Math.PI / 16);
-
-    if (isHelpVisible) ctx.scale(1.1, 1.1);
-
+// Desenha o Professor Sigma (lápis) na origem atual — reusado na ajuda e na intro
+function drawSigmaShape() {
     ctx.fillStyle = '#FFB6C1';
     ctx.beginPath(); ctx.roundRect(-12, -40, 24, 15, {tl: 5, tr: 5, bl: 0, br: 0}); ctx.fill();
 
@@ -771,6 +772,19 @@ function drawHelpSystem() {
     ctx.fillStyle = '#F5F5F5';
     ctx.beginPath(); ctx.ellipse(-5, 13, 7, 3, Math.PI/8, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(5, 13, 7, 3, -Math.PI/8, 0, Math.PI*2); ctx.fill();
+}
+
+// --- DESENHO DO PROFESSOR SIGMA (ajuda) ---
+function drawHelpSystem() {
+    if (gameState !== 'playing') return;
+
+    ctx.save();
+    ctx.translate(pencilBtn.x + pencilBtn.width/2, pencilBtn.y + pencilBtn.height/2);
+    ctx.rotate(-Math.PI / 16);
+
+    if (isHelpVisible) ctx.scale(1.1, 1.1);
+
+    drawSigmaShape();
 
     ctx.restore();
 
@@ -830,26 +844,40 @@ function drawIntro() {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = `bold ${34 * fontScale()}px Varela Round`;
-    ctx.fillText("Street Numbers", 400, 130);
-    ctx.font = `${18 * fontScale()}px Varela Round`;
-    ctx.fillText("Bem-vindo a Numerópolis!", 400, 165);
+    ctx.font = `bold ${30 * fontScale()}px Varela Round`;
+    ctx.fillText("Street Numbers", 400, 118);
+    ctx.font = `${16 * fontScale()}px Varela Round`;
+    ctx.fillText("Bem-vindo a Numerópolis!", 400, 148);
 
-    // Fala do Professor Sigma
+    // Imagem do Professor Sigma (à esquerda da mensagem)
+    ctx.save();
+    ctx.translate(200, 300);
+    ctx.scale(2.4, 2.4);
+    ctx.rotate(-Math.PI / 16);
+    drawSigmaShape();
+    ctx.restore();
+    ctx.fillStyle = '#06351c'; ctx.font = `bold ${14 * fontScale()}px Varela Round`; ctx.textAlign = 'center';
+    ctx.fillText("Prof. Sigma", 200, 420);
+
+    // Fala do Professor Sigma (ao lado da imagem)
     ctx.fillStyle = '#06351c';
-    ctx.font = `bold ${16 * fontScale()}px Varela Round`;
+    ctx.font = `bold ${15 * fontScale()}px Varela Round`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
     const speech = [
         "Olá! Eu sou o Professor Sigma.",
-        "Uma tempestade numérica bagunçou a",
-        "nossa cidade. Com o carrinho Numix,",
-        "resolva os desafios e traga de volta",
+        "Uma tempestade numérica",
+        "bagunçou nossa cidade.",
+        "Com o carrinho Numix, resolva",
+        "os desafios e traga de volta",
         "a harmonia dos números.",
         "",
-        "Sem pressa e sem limite de tempo:",
-        "use ← → para guiar e ESPAÇO para responder."
+        "Sem pressa, sem limite de tempo.",
+        "Use ← → e ESPAÇO para responder."
     ];
-    let ly = 215;
-    speech.forEach(line => { ctx.fillText(line, 400, ly); ly += 26; });
+    let ly = 195;
+    speech.forEach(line => { ctx.fillText(line, 300, ly); ly += 25; });
+    ctx.textAlign = 'center';
 
     // Botão Começar
     ctx.fillStyle = COLORS.highlight;
@@ -893,8 +921,55 @@ function drawVictoryScreen() {
     ctx.fillStyle = '#333'; ctx.font = `bold ${20 * fontScale()}px Varela Round`; ctx.fillText("Recomeçar", 400, restartBtn.y + 30);
 }
 
+// --- TELA DE ABERTURA (splash, antes do login) ---
+function drawSplash() {
+    splashFrame++;
+
+    // Fundo azul pastel bem clarinho
+    let g = ctx.createLinearGradient(0, 0, 0, 600);
+    g.addColorStop(0, '#EAF4FF'); g.addColorStop(0.55, '#DCEEFF'); g.addColorStop(1, '#CFE7FB');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 800, 600);
+
+    // Números espalhados (suaves)
+    const nums = [
+        { x: 90, y: 120, v: '7', s: 54, r: -0.2 }, { x: 700, y: 110, v: '3', s: 60, r: 0.25 },
+        { x: 150, y: 470, v: '9', s: 50, r: 0.15 }, { x: 660, y: 500, v: '5', s: 64, r: -0.18 },
+        { x: 400, y: 70, v: '1', s: 40, r: 0.1 }, { x: 55, y: 300, v: '4', s: 44, r: 0.3 },
+        { x: 745, y: 320, v: '8', s: 46, r: -0.25 }, { x: 300, y: 545, v: '2', s: 38, r: 0.2 },
+        { x: 520, y: 150, v: '6', s: 42, r: -0.15 }, { x: 230, y: 200, v: '%', s: 40, r: 0.1 },
+        { x: 560, y: 525, v: '√', s: 46, r: -0.1 }, { x: 470, y: 470, v: '=', s: 38, r: 0.15 }
+    ];
+    ctx.fillStyle = 'rgba(90, 155, 212, 0.28)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    nums.forEach(n => {
+        ctx.save(); ctx.translate(n.x, n.y); ctx.rotate(n.r);
+        ctx.font = `bold ${n.s}px Varela Round`; ctx.fillText(n.v, 0, 0);
+        ctx.restore();
+    });
+
+    // Logo "Street Numbers" em azul
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = 'bold 66px Varela Round';
+    ctx.fillStyle = '#0a2a52'; ctx.fillText('Street', 403, 203);
+    ctx.fillStyle = '#1E90FF'; ctx.fillText('Street', 400, 200);
+    ctx.fillStyle = '#0a2a52'; ctx.fillText('Numbers', 403, 273);
+    ctx.fillStyle = '#3FA9F5'; ctx.fillText('Numbers', 400, 270);
+    ctx.font = '22px Varela Round'; ctx.fillStyle = '#3a6ea5';
+    ctx.fillText('Numerópolis', 400, 308);
+
+    // Numix
+    ctx.save(); ctx.translate(400, 425); ctx.scale(1.5, 1.5); drawNumixShape(); ctx.restore();
+
+    // Chamada (pisca suavemente)
+    let alpha = 0.55 + 0.45 * Math.sin(splashFrame * 0.05);
+    ctx.font = 'bold 20px Varela Round';
+    ctx.fillStyle = `rgba(46, 90, 138, ${alpha.toFixed(3)})`;
+    ctx.fillText('Toque ou pressione qualquer tecla para começar', 400, 565);
+}
+
 function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (appView === 'splash') { drawSplash(); requestAnimationFrame(loop); return; }
     updatePhysics();
     drawEnvironment();
     if (gameState === 'intro') {
@@ -969,6 +1044,14 @@ function fmtDate(iso) {
     if (!iso) return '—';
     try { const d = new Date(iso); return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
     catch (e) { return '—'; }
+}
+
+function showSplash() {
+    appView = 'splash';
+    document.body.classList.remove('in-game');
+    document.getElementById('authScreen').classList.add('hidden');
+    document.getElementById('teacherDashboard').classList.add('hidden');
+    document.getElementById('settingsPanel').classList.add('hidden');
 }
 
 function showAuth() {
@@ -1187,5 +1270,5 @@ function setupAuth() {
 
 setupUI();
 setupAuth();
-showAuth();
+showSplash();
 loop();
