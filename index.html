@@ -63,6 +63,18 @@
         <!-- Botão sair (trocar usuário) durante o jogo -->
         <button id="exitBtn" aria-label="Trocar de usuário" title="Trocar de usuário">⤺ Sair</button>
 
+        <!-- Botão de fases (trocar de bairro/fase) -->
+        <button id="phasesBtn" aria-label="Trocar de fase" title="Trocar de fase">🗺 Fases</button>
+
+        <!-- Painel de seleção de fase -->
+        <div id="phasesPanel" class="hidden" role="dialog" aria-label="Trocar de fase">
+            <h2>Trocar de fase</h2>
+            <button class="phaseOpt" data-phase="0">🟫 Raiz Quadrada</button>
+            <button class="phaseOpt" data-phase="1">🟦 Porcentagens</button>
+            <button class="phaseOpt" data-phase="2">🟩 Regra de Três</button>
+            <button id="phasesClose">Fechar</button>
+        </div>
+
         <!-- Botão de acessibilidade / configurações -->
         <button id="settingsBtn" aria-label="Abrir configurações de acessibilidade" title="Acessibilidade">⚙</button>
 
