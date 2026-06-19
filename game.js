@@ -180,11 +180,17 @@ function startMusic() {
     if (!audioCtx || musicTimer) return;
     const step = () => {
         if (!settings.music) return;
-        playTone(musicNotes[musicIdx % musicNotes.length], 1.8, 0.04, 0); // quase invisível
+        playTone(musicNotes[musicIdx % musicNotes.length], 1.8, 0.09, 0.05); // suave e audível
         musicIdx++;
     };
-    step();
-    musicTimer = setInterval(step, 2000);
+    const begin = () => {
+        if (musicTimer) return;
+        step();
+        musicTimer = setInterval(step, 2000);
+    };
+    // resume() é assíncrono; só inicia o loop quando o contexto estiver tocando
+    if (audioCtx.state === 'suspended') audioCtx.resume().then(begin).catch(begin);
+    else begin();
 }
 function stopMusic() {
     if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
@@ -1243,7 +1249,8 @@ function setupUI() {
     $('optSound').addEventListener('change', (e) => { settings.sound = e.target.checked; saveSettings(); });
     $('optMusic').addEventListener('change', (e) => {
         settings.music = e.target.checked; saveSettings();
-        if (settings.music) startMusic(); else stopMusic();
+        ensureAudio();
+        if (settings.music) { stopMusic(); startMusic(); } else stopMusic();
     });
     $('optContrast').addEventListener('change', (e) => { settings.highContrast = e.target.checked; saveSettings(); });
     $('optLargeFont').addEventListener('change', (e) => { settings.largeFont = e.target.checked; saveSettings(); });
