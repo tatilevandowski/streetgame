@@ -547,6 +547,11 @@ function drawEnvironment() {
     drawTree(120, 320, 0.7, repairLevel); drawTree(680, 330, 0.7, repairLevel);
     drawTree(80, 420, 1.0, repairLevel); drawTree(750, 440, 1.1, repairLevel);
     drawTree(30, 580, 1.5, repairLevel); drawTree(780, 560, 1.6, repairLevel);
+
+    // Números caídos pela cidade nas primeiras fases (Raiz Quadrada e Porcentagens)
+    if (bairroPhase < 2 && gameState !== 'victory') {
+        drawScatteredNumbers(repairLevel);
+    }
 }
 
 function drawScatteredNumbers(repairLevel) {
