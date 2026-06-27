@@ -56,7 +56,26 @@
                     <button id="teacherLogout">Sair</button>
                 </div>
                 <p class="muted">Acompanhamento da evolução dos alunos. Dados salvos neste dispositivo.</p>
+                <button id="editBairrosBtn" class="dashaction">✏️ Editar bairros e cálculos</button>
                 <div id="studentList"></div>
+            </div>
+        </div>
+
+        <!-- ===== Editor de bairros e cálculos (Professor) ===== -->
+        <div id="bairroEditor" class="overlay hidden">
+            <div class="dashcard">
+                <div class="dashhead">
+                    <h1>Bairros e cálculos</h1>
+                    <button id="closeEditorBtn">Fechar</button>
+                </div>
+                <p class="muted">Crie bairros, edite os cálculos e marque a resposta certa. As mudanças valem para os próximos jogos dos alunos.</p>
+                <div id="editorList"></div>
+                <div class="editorActions">
+                    <button id="addBairroBtn" class="secondary">+ Adicionar bairro</button>
+                    <button id="resetBairrosBtn" class="secondary">Restaurar padrão</button>
+                    <button id="saveBairrosBtn">Salvar</button>
+                </div>
+                <p id="editorHint" class="hint"></p>
             </div>
         </div>
 
@@ -66,12 +85,10 @@
         <!-- Botão de fases (trocar de bairro/fase) -->
         <button id="phasesBtn" aria-label="Trocar de fase" title="Trocar de fase">🗺 Fases</button>
 
-        <!-- Painel de seleção de fase -->
+        <!-- Painel de seleção de fase (lista montada dinamicamente) -->
         <div id="phasesPanel" class="hidden" role="dialog" aria-label="Trocar de fase">
             <h2>Trocar de fase</h2>
-            <button class="phaseOpt" data-phase="0">🟫 Raiz Quadrada</button>
-            <button class="phaseOpt" data-phase="1">🟦 Porcentagens</button>
-            <button class="phaseOpt" data-phase="2">🟩 Regra de Três</button>
+            <div id="phasesList"></div>
             <button id="phasesClose">Fechar</button>
         </div>
 

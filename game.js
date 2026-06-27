@@ -36,6 +36,11 @@ function saveSettings() {
 }
 let settings = loadSettings();
 
+// Dispositivo de toque (mesmo critério do CSS dos botões de toque)
+function isTouchDevice() {
+    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+
 // Fatores derivados das configurações
 function fontScale() { return settings.largeFont ? 1.25 : 1; }
 function timeFactor() { return settings.extraTime ? 0.55 : 1; } // menor = desafio se aproxima mais devagar = mais tempo
@@ -52,7 +57,7 @@ let session = null; // sessão de jogo atual do aluno (referência dentro do reg
 function hashPass(p) { return btoa(unescape(encodeURIComponent(p))); }
 function normalizeKey(name) { return (name || '').trim().toLowerCase(); }
 function nowISO() { return new Date().toISOString(); }
-function bairroKey(idx) { if (idx < 6) return 'raiz'; if (idx < 12) return 'porcentagem'; return 'regra'; }
+function bairroKey(idx) { return (questionBank[idx] && questionBank[idx].bairroId) || 'b'; }
 
 function getStudents() {
     try { return JSON.parse(localStorage.getItem('streetNumbersStudents') || '{}'); } catch (e) { return {}; }
@@ -109,10 +114,9 @@ let teachersDB = getTeachers();
 function startStudentSession() {
     const rec = studentsDB[currentStudentKey];
     if (!rec) return;
-    session = {
-        date: nowISO(), correct: 0, total: 0, completed: false,
-        perBairro: { raiz: { c: 0, t: 0 }, porcentagem: { c: 0, t: 0 }, regra: { c: 0, t: 0 } }
-    };
+    const perBairro = {};
+    bairros.forEach(b => { perBairro[b.id] = { c: 0, t: 0 }; });
+    session = { date: nowISO(), correct: 0, total: 0, completed: false, perBairro };
     rec.sessions = rec.sessions || [];
     rec.sessions.push(session);
     rec.lastPlayed = session.date;
@@ -219,12 +223,6 @@ let praiseTimer = 0;
 let isHelpVisible = false;
 const pencilBtn = { x: 720, y: 480, width: 60, height: 90 };
 
-const hints = [
-    "DICA: Que número multiplicado por\nele mesmo resulta nesse valor?",
-    "DICA: Multiplique o número pela\nporcentagem e divida por 100.",
-    "DICA: Multiplique os valores cruzados\npara achar a resposta."
-];
-
 let particles = [];
 const restartBtn = { x: 300, y: 335, width: 200, height: 45 };
 const startBtn = { x: 300, y: 470, width: 200, height: 50 };
@@ -244,34 +242,82 @@ const clouds = [
     { x: 800, y: 80, size: 40 }
 ];
 
-// Banco de Perguntas (6 por Bairro, Embaralhado automaticamente)
-const questionBank = [
-    // BAIRRO 1: Raiz Quadrada
-    { title: "BAIRRO RAIZ QUADRADA", question: "√9 =", options: [{ value: 3, isCorrect: true }, { value: 2, isCorrect: false }, { value: 4, isCorrect: false }] },
-    { title: "BAIRRO RAIZ QUADRADA", question: "√16 =", options: [{ value: 4, isCorrect: true }, { value: 8, isCorrect: false }, { value: 6, isCorrect: false }] },
-    { title: "BAIRRO RAIZ QUADRADA", question: "√25 =", options: [{ value: 5, isCorrect: true }, { value: 3, isCorrect: false }, { value: 7, isCorrect: false }] },
-    { title: "BAIRRO RAIZ QUADRADA", question: "√36 =", options: [{ value: 6, isCorrect: true }, { value: 4, isCorrect: false }, { value: 8, isCorrect: false }] },
-    { title: "BAIRRO RAIZ QUADRADA", question: "√49 =", options: [{ value: 7, isCorrect: true }, { value: 5, isCorrect: false }, { value: 9, isCorrect: false }] },
-    { title: "BAIRRO RAIZ QUADRADA", question: "√64 =", options: [{ value: 8, isCorrect: true }, { value: 6, isCorrect: false }, { value: 10, isCorrect: false }] },
-
-    // BAIRRO 2: Porcentagem
-    { title: "BAIRRO PORCENTAGENS", question: "50% de 20 =", options: [{ value: 10, isCorrect: true }, { value: 5, isCorrect: false }, { value: 15, isCorrect: false }] },
-    { title: "BAIRRO PORCENTAGENS", question: "10% de 50 =", options: [{ value: 5, isCorrect: true }, { value: 10, isCorrect: false }, { value: 50, isCorrect: false }] },
-    { title: "BAIRRO PORCENTAGENS", question: "25% de 40 =", options: [{ value: 10, isCorrect: true }, { value: 20, isCorrect: false }, { value: 25, isCorrect: false }] },
-    { title: "BAIRRO PORCENTAGENS", question: "100% de 7 =", options: [{ value: 7, isCorrect: true }, { value: 1, isCorrect: false }, { value: 10, isCorrect: false }] },
-    { title: "BAIRRO PORCENTAGENS", question: "20% de 50 =", options: [{ value: 10, isCorrect: true }, { value: 20, isCorrect: false }, { value: 5, isCorrect: false }] },
-    { title: "BAIRRO PORCENTAGENS", question: "50% de 80 =", options: [{ value: 40, isCorrect: true }, { value: 20, isCorrect: false }, { value: 80, isCorrect: false }] },
-
-    // BAIRRO 3: Regra de Três
-    { title: "BAIRRO REGRA DE TRÊS", question: "Se 1=3, 2=?", options: [{ value: 6, isCorrect: true }, { value: 5, isCorrect: false }, { value: 7, isCorrect: false }] },
-    { title: "BAIRRO REGRA DE TRÊS", question: "Se 2=4, 3=?", options: [{ value: 6, isCorrect: true }, { value: 5, isCorrect: false }, { value: 4, isCorrect: false }] },
-    { title: "BAIRRO REGRA DE TRÊS", question: "Se 3=9, 4=?", options: [{ value: 12, isCorrect: true }, { value: 10, isCorrect: false }, { value: 11, isCorrect: false }] },
-    { title: "BAIRRO REGRA DE TRÊS", question: "Se 4=8, 5=?", options: [{ value: 10, isCorrect: true }, { value: 9, isCorrect: false }, { value: 11, isCorrect: false }] },
-    { title: "BAIRRO REGRA DE TRÊS", question: "Se 5=15, 2=?", options: [{ value: 6, isCorrect: true }, { value: 10, isCorrect: false }, { value: 5, isCorrect: false }] },
-    { title: "BAIRRO REGRA DE TRÊS", question: "Se 2=10, 3=?", options: [{ value: 15, isCorrect: true }, { value: 20, isCorrect: false }, { value: 12, isCorrect: false }] }
+// ===== Bairros e cálculos (configuráveis pelo professor) =====
+// Salvo em localStorage: array de bairros
+//   { id, name, hint, questions: [ { question, options: [{ value, isCorrect }] } ] }
+const defaultBairros = [
+    {
+        id: 'raiz', name: 'BAIRRO RAIZ QUADRADA',
+        hint: 'DICA: Que número multiplicado por\nele mesmo resulta nesse valor?',
+        questions: [
+            { question: '√9 =', options: [{ value: 3, isCorrect: true }, { value: 2, isCorrect: false }, { value: 4, isCorrect: false }] },
+            { question: '√16 =', options: [{ value: 4, isCorrect: true }, { value: 8, isCorrect: false }, { value: 6, isCorrect: false }] },
+            { question: '√25 =', options: [{ value: 5, isCorrect: true }, { value: 3, isCorrect: false }, { value: 7, isCorrect: false }] },
+            { question: '√36 =', options: [{ value: 6, isCorrect: true }, { value: 4, isCorrect: false }, { value: 8, isCorrect: false }] },
+            { question: '√49 =', options: [{ value: 7, isCorrect: true }, { value: 5, isCorrect: false }, { value: 9, isCorrect: false }] },
+            { question: '√64 =', options: [{ value: 8, isCorrect: true }, { value: 6, isCorrect: false }, { value: 10, isCorrect: false }] }
+        ]
+    },
+    {
+        id: 'porcentagem', name: 'BAIRRO PORCENTAGENS',
+        hint: 'DICA: Multiplique o número pela\nporcentagem e divida por 100.',
+        questions: [
+            { question: '50% de 20 =', options: [{ value: 10, isCorrect: true }, { value: 5, isCorrect: false }, { value: 15, isCorrect: false }] },
+            { question: '10% de 50 =', options: [{ value: 5, isCorrect: true }, { value: 10, isCorrect: false }, { value: 50, isCorrect: false }] },
+            { question: '25% de 40 =', options: [{ value: 10, isCorrect: true }, { value: 20, isCorrect: false }, { value: 25, isCorrect: false }] },
+            { question: '100% de 7 =', options: [{ value: 7, isCorrect: true }, { value: 1, isCorrect: false }, { value: 10, isCorrect: false }] },
+            { question: '20% de 50 =', options: [{ value: 10, isCorrect: true }, { value: 20, isCorrect: false }, { value: 5, isCorrect: false }] },
+            { question: '50% de 80 =', options: [{ value: 40, isCorrect: true }, { value: 20, isCorrect: false }, { value: 80, isCorrect: false }] }
+        ]
+    },
+    {
+        id: 'regra', name: 'BAIRRO REGRA DE TRÊS',
+        hint: 'DICA: Multiplique os valores cruzados\npara achar a resposta.',
+        questions: [
+            { question: 'Se 1=3, 2=?', options: [{ value: 6, isCorrect: true }, { value: 5, isCorrect: false }, { value: 7, isCorrect: false }] },
+            { question: 'Se 2=4, 3=?', options: [{ value: 6, isCorrect: true }, { value: 5, isCorrect: false }, { value: 4, isCorrect: false }] },
+            { question: 'Se 3=9, 4=?', options: [{ value: 12, isCorrect: true }, { value: 10, isCorrect: false }, { value: 11, isCorrect: false }] },
+            { question: 'Se 4=8, 5=?', options: [{ value: 10, isCorrect: true }, { value: 9, isCorrect: false }, { value: 11, isCorrect: false }] },
+            { question: 'Se 5=15, 2=?', options: [{ value: 6, isCorrect: true }, { value: 10, isCorrect: false }, { value: 5, isCorrect: false }] },
+            { question: 'Se 2=10, 3=?', options: [{ value: 15, isCorrect: true }, { value: 20, isCorrect: false }, { value: 12, isCorrect: false }] }
+        ]
+    }
 ];
 
-let challenge = { distanceY: 200, ...questionBank[0] };
+function genId() { return 'b' + Math.random().toString(36).slice(2, 8); }
+function loadBairros() {
+    try {
+        const raw = JSON.parse(localStorage.getItem('streetNumbersBairros') || 'null');
+        if (Array.isArray(raw) && raw.length) return raw;
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(defaultBairros));
+}
+function saveBairros() { try { localStorage.setItem('streetNumbersBairros', JSON.stringify(bairros)); } catch (e) {} }
+
+let bairros = loadBairros();
+
+// Banco achatado (uma entrada por questão), reconstruído quando o professor edita
+function buildBank() {
+    const bank = [];
+    bairros.forEach((b, bi) => (b.questions || []).forEach(q => {
+        bank.push({ bairroIdx: bi, bairroId: b.id, title: b.name, question: q.question, options: q.options });
+    }));
+    return bank;
+}
+let questionBank = buildBank();
+
+function totalBairros() { return bairros.length; }
+function bairroStartIndex(bi) {
+    let s = 0;
+    for (let i = 0; i < bi && i < bairros.length; i++) s += (bairros[i].questions || []).length;
+    return s;
+}
+function currentBairroIndex() {
+    if (currentQuestionIndex < questionBank.length) return questionBank[currentQuestionIndex].bairroIdx;
+    return Math.max(0, totalBairros() - 1);
+}
+
+let challenge = { distanceY: 200, ...(questionBank[0] || { title: '', question: '', options: [] }) };
 
 // Carrinho Numix
 const numix = { x: 400, y: 480, width: 120, height: 70 };
@@ -353,7 +399,7 @@ function resetGame() {
     currentQuestionIndex = 0; particles = []; numix.x = 400;
     praiseText = null; praiseTimer = 0;
     potholes = [ { x: 380, y: 300, size: 40 }, { x: 450, y: 450, size: 60 }, { x: 320, y: 550, size: 50 } ];
-    challenge = { distanceY: 200, ...questionBank[0] };
+    challenge = { distanceY: 200, ...(questionBank[0] || { title: '', question: '', options: [] }) };
     startStudentSession();
     gameState = 'playing';
     canvas.style.cursor = 'default';
@@ -361,8 +407,8 @@ function resetGame() {
 
 // Salta direto para o início de um bairro/fase (0=Raiz, 1=Porcentagem, 2=Regra)
 function jumpToBairro(phaseIdx) {
-    const start = phaseIdx * 6;
-    if (start < 0 || start >= questionBank.length) return;
+    const start = bairroStartIndex(phaseIdx);
+    if (phaseIdx < 0 || phaseIdx >= totalBairros() || start >= questionBank.length) return;
     // Garante que o jogo esteja rodando (cobre intro e vitória)
     if (gameState !== 'playing') {
         ensureAudio();
@@ -469,11 +515,12 @@ function blendColors(c1, c2, ratio) {
 }
 
 // Reparo da cidade: avança um pouco a CADA FASE (bairro), nunca regride.
-// Último valor < 1 garante que mesmo no fim reste alguma destruição.
-const PHASE_REPAIR = [0.2, 0.5, 0.8];
+// Vai de 0.2 (1º bairro) até 0.8 (último), pra sempre restar alguma destruição.
 function repairProgress() {
-    let phase = Math.min(2, Math.floor(currentQuestionIndex / 6));
-    return PHASE_REPAIR[phase];
+    const n = totalBairros();
+    if (n <= 1) return 0.5;
+    const bi = currentBairroIndex();
+    return Math.min(0.8, 0.2 + 0.6 * (bi / (n - 1)));
 }
 function activePotholeCount() {
     return Math.max(1, Math.ceil((1 - repairProgress()) * 3));
@@ -481,10 +528,7 @@ function activePotholeCount() {
 
 // --- DESENHO DO AMBIENTE (estética clay/massinha) ---
 function drawEnvironment() {
-    let bairroPhase = Math.floor(currentQuestionIndex / 6);
-    if (bairroPhase > 2) bairroPhase = 2;
-
-    // Reparo contínuo (0 = destruído, MAX_REPAIR = quase recuperado)
+    // Reparo por bairro (0 = destruído, 0.8 = quase recuperado)
     let repairLevel = repairProgress();
 
     // Cores interpolam de "destruído" (acinzentado) para "recuperado" (pastel) conforme o reparo
@@ -554,8 +598,8 @@ function drawEnvironment() {
     drawTree(80, 420, 1.0, repairLevel); drawTree(750, 440, 1.1, repairLevel);
     drawTree(30, 580, 1.5, repairLevel); drawTree(780, 560, 1.6, repairLevel);
 
-    // Números caídos pela cidade nas primeiras fases (Raiz Quadrada e Porcentagens)
-    if (bairroPhase < 2 && gameState !== 'victory') {
+    // Números caídos pela cidade enquanto ainda está bem destruída
+    if (repairLevel < 0.7 && gameState !== 'victory') {
         drawScatteredNumbers(repairLevel);
     }
 }
@@ -573,7 +617,8 @@ function drawScatteredNumbers(repairLevel) {
 
     ctx.fillStyle = '#E8A87C';
     scattered.forEach((item, index) => {
-        if (repairLevel === 0.5 && index % 2 !== 0) return;
+        // Quanto mais reparada a cidade, menos números restam espalhados
+        if (repairLevel >= 0.4 && index % 2 !== 0) return;
 
         ctx.save();
         ctx.translate(item.x, item.y);
@@ -800,10 +845,13 @@ function drawUI() {
     ctx.fillText(label, rightEdge - pad, pillY + pillH / 2);
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'center'; ctx.fillStyle = hc ? '#000' : '#555';
-    if (isWaitingForSelection && gameState === 'playing') {
-        ctx.font = `bold ${20 * fontScale()}px Varela Round`; ctx.fillText("Escolha com ← → e aperte ESPAÇO / OK", 400, 560);
-    } else if (distanceDriven < 150 && !isChallengeVisible && gameState === 'playing') {
-        ctx.font = `bold ${18 * fontScale()}px Varela Round`; ctx.fillText("Use as setas ← e → para guiar o Numix", 400, 560);
+    // Instruções de teclado só no desktop; no mobile os botões de toque já orientam
+    if (!isTouchDevice()) {
+        if (isWaitingForSelection && gameState === 'playing') {
+            ctx.font = `bold ${20 * fontScale()}px Varela Round`; ctx.fillText("Escolha com ← → e aperte ESPAÇO / OK", 400, 560);
+        } else if (distanceDriven < 150 && !isChallengeVisible && gameState === 'playing') {
+            ctx.font = `bold ${18 * fontScale()}px Varela Round`; ctx.fillText("Use as setas ← e → para guiar o Numix", 400, 560);
+        }
     }
 }
 
@@ -865,9 +913,8 @@ function drawHelpSystem() {
 
     // --- CAIXA DE DIÁLOGO ---
     if (isHelpVisible) {
-        let bairroPhase = Math.floor(currentQuestionIndex / 6);
-        if (bairroPhase > 2) bairroPhase = 2;
-        let hintText = hints[bairroPhase];
+        let b = bairros[currentBairroIndex()];
+        let hintText = (b && b.hint) ? b.hint : 'DICA: Observe bem o desafio\ne escolha com calma.';
 
         const boxW = 280;
         const boxH = 65;
@@ -1224,27 +1271,31 @@ function setupUI() {
     $('settingsBtn').addEventListener('click', () => { ensureAudio(); panel.classList.toggle('hidden'); });
     $('settingsClose').addEventListener('click', () => panel.classList.add('hidden'));
 
-    // Painel de fases: destaca a fase atual ao abrir e salta ao clicar
+    // Painel de fases: lista de bairros montada dinamicamente (refaz ao abrir)
     const phasesPanel = $('phasesPanel');
-    const markCurrentPhase = () => {
-        const cur = Math.min(2, Math.floor(currentQuestionIndex / 6));
-        phasesPanel.querySelectorAll('.phaseOpt').forEach(b => {
-            b.classList.toggle('current', Number(b.getAttribute('data-phase')) === cur);
+    const phasesList = $('phasesList');
+    const ICONS = ['🟫', '🟦', '🟩', '🟨', '🟧', '🟪', '⬜'];
+    const renderPhasesMenu = () => {
+        const cur = currentBairroIndex();
+        phasesList.innerHTML = '';
+        bairros.forEach((b, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'phaseOpt' + (i === cur ? ' current' : '');
+            btn.textContent = `${ICONS[i % ICONS.length]} ${b.name.replace(/^BAIRRO\s+/i, '')}`;
+            btn.addEventListener('click', () => {
+                jumpToBairro(i);
+                phasesPanel.classList.add('hidden');
+            });
+            phasesList.appendChild(btn);
         });
     };
     $('phasesBtn').addEventListener('click', () => {
         ensureAudio();
         panel.classList.add('hidden');
-        markCurrentPhase();
+        renderPhasesMenu();
         phasesPanel.classList.toggle('hidden');
     });
     $('phasesClose').addEventListener('click', () => phasesPanel.classList.add('hidden'));
-    phasesPanel.querySelectorAll('.phaseOpt').forEach(btn => {
-        btn.addEventListener('click', () => {
-            jumpToBairro(Number(btn.getAttribute('data-phase')));
-            phasesPanel.classList.add('hidden');
-        });
-    });
 
     $('optSound').addEventListener('change', (e) => { settings.sound = e.target.checked; saveSettings(); });
     $('optMusic').addEventListener('change', (e) => {
@@ -1300,6 +1351,7 @@ function showSplash() {
     document.getElementById('authScreen').classList.add('hidden');
     document.getElementById('teacherDashboard').classList.add('hidden');
     document.getElementById('settingsPanel').classList.add('hidden');
+    document.getElementById('bairroEditor').classList.add('hidden');
 }
 
 function showAuth() {
@@ -1308,6 +1360,7 @@ function showAuth() {
     document.getElementById('authScreen').classList.remove('hidden');
     document.getElementById('teacherDashboard').classList.add('hidden');
     document.getElementById('settingsPanel').classList.add('hidden');
+    document.getElementById('bairroEditor').classList.add('hidden');
     // volta para a escolha de perfil
     document.getElementById('roleChoice').classList.remove('hidden');
     document.getElementById('studentForm').classList.add('hidden');
@@ -1319,6 +1372,7 @@ function showStudentGame() {
     document.body.classList.add('in-game');
     document.getElementById('authScreen').classList.add('hidden');
     document.getElementById('teacherDashboard').classList.add('hidden');
+    document.getElementById('bairroEditor').classList.add('hidden');
 }
 
 function showTeacher() {
@@ -1326,6 +1380,7 @@ function showTeacher() {
     document.body.classList.remove('in-game');
     stopMusic();
     document.getElementById('authScreen').classList.add('hidden');
+    document.getElementById('bairroEditor').classList.add('hidden');
     document.getElementById('teacherDashboard').classList.remove('hidden');
     renderDashboard();
 }
@@ -1338,7 +1393,7 @@ function enterStudentGame(rec) {
     isChallengeVisible = false; isWaitingForSelection = false; isAnswered = false; isHelpVisible = false;
     currentQuestionIndex = 0; particles = []; numix.x = 400; praiseText = null; praiseTimer = 0; session = null;
     potholes = [ { x: 380, y: 300, size: 40 }, { x: 450, y: 450, size: 60 }, { x: 320, y: 550, size: 50 } ];
-    challenge = { distanceY: 200, ...questionBank[0] };
+    challenge = { distanceY: 200, ...(questionBank[0] || { title: '', question: '', options: [] }) };
     gameState = 'intro';
     showStudentGame();
 }
@@ -1403,14 +1458,23 @@ function logout() {
     showAuth();
 }
 
-// Painel do professor: agrega o progresso de cada aluno
+// Rótulo amigável de um bairro pela sua id (sem o prefixo "BAIRRO ")
+function bairroLabel(id) {
+    const b = bairros.find(x => x.id === id);
+    return b ? b.name.replace(/^BAIRRO\s+/i, '') : id;
+}
+
+// Painel do professor: agrega o progresso de cada aluno (bairros dinâmicos)
 function aggregate(rec) {
     let c = 0, t = 0, completed = 0;
-    const per = { raiz: { c: 0, t: 0 }, porcentagem: { c: 0, t: 0 }, regra: { c: 0, t: 0 } };
+    const per = {};
+    const ensure = (k) => (per[k] || (per[k] = { c: 0, t: 0 }));
+    bairros.forEach(b => ensure(b.id)); // bairros atuais sempre aparecem
     (rec.sessions || []).forEach(s => {
         c += s.correct || 0; t += s.total || 0; if (s.completed) completed++;
-        ['raiz', 'porcentagem', 'regra'].forEach(k => {
-            if (s.perBairro && s.perBairro[k]) { per[k].c += s.perBairro[k].c; per[k].t += s.perBairro[k].t; }
+        if (s.perBairro) Object.keys(s.perBairro).forEach(k => {
+            const p = ensure(k);
+            p.c += s.perBairro[k].c || 0; p.t += s.perBairro[k].t || 0;
         });
     });
     return { correct: c, errors: t - c, accuracy: t ? Math.round(c / t * 100) : 0, totalAnswered: t, completed, per };
@@ -1425,16 +1489,15 @@ function renderDashboard() {
         wrap.innerHTML = '<p class="muted">Nenhum aluno cadastrado ainda. Peça para um aluno se cadastrar e jogar.</p>';
         return;
     }
-    const bairroLabels = { raiz: 'Raiz Quadrada', porcentagem: 'Porcentagens', regra: 'Regra de Três' };
     let html = '';
     keys.forEach(n => {
         const r = studentsDB[n];
         const a = aggregate(r);
         let bars = '';
-        ['raiz', 'porcentagem', 'regra'].forEach(k => {
+        Object.keys(a.per).forEach(k => {
             const pct = a.per[k].t ? Math.round(a.per[k].c / a.per[k].t * 100) : 0;
             bars += `<div class="barline">
-                <span class="lbl">${bairroLabels[k]}</span>
+                <span class="lbl">${escapeHtml(bairroLabel(k))}</span>
                 <span class="track"><span class="fill" style="width:${pct}%"></span></span>
                 <span class="pct">${a.per[k].t ? pct + '%' : '—'}</span>
             </div>`;
@@ -1463,6 +1526,157 @@ function renderDashboard() {
                 renderDashboard();
             }
         });
+    });
+}
+
+// ===== Editor de bairros e cálculos (Professor) =====
+function renderEditor(arr) {
+    const list = document.getElementById('editorList');
+    let html = '';
+    arr.forEach((b, bi) => {
+        let qhtml = '';
+        (b.questions || []).forEach((q, qi) => {
+            let ohtml = '';
+            (q.options || []).forEach((o, oi) => {
+                ohtml += `<label class="eopt">
+                    <input type="radio" class="eo-correct" name="correct-${bi}-${qi}" value="${oi}" ${o.isCorrect ? 'checked' : ''} title="Resposta certa">
+                    <input class="eo-val" value="${escapeHtml(o.value != null ? String(o.value) : '')}" placeholder="opção">
+                    <button type="button" class="ebtn-x" data-action="del-opt" data-bi="${bi}" data-qi="${qi}" data-oi="${oi}">−</button>
+                </label>`;
+            });
+            qhtml += `<div class="equestion">
+                <div class="eqrow">
+                    <input class="eq-text" value="${escapeHtml(q.question || '')}" placeholder="Cálculo (ex: √16 =)">
+                    <button type="button" class="ebtn-x" data-action="del-q" data-bi="${bi}" data-qi="${qi}" title="Remover cálculo">✕</button>
+                </div>
+                <div class="eoptlist">${ohtml}</div>
+                <button type="button" class="addmini" data-action="add-opt" data-bi="${bi}" data-qi="${qi}">+ opção</button>
+            </div>`;
+        });
+        html += `<div class="ebairro" data-id="${escapeHtml(b.id || '')}">
+            <div class="ebhead">
+                <input class="eb-name" value="${escapeHtml(b.name || '')}" placeholder="Nome do bairro">
+                <button type="button" class="ebtn-del" data-action="del-bairro" data-bi="${bi}">Remover bairro</button>
+            </div>
+            <textarea class="eb-hint" rows="2" placeholder="Dica do Prof. Sigma (até 2 linhas)">${escapeHtml(b.hint || '')}</textarea>
+            <div class="eqlist">${qhtml}</div>
+            <button type="button" class="addmini" data-action="add-q" data-bi="${bi}">+ cálculo</button>
+        </div>`;
+    });
+    list.innerHTML = html;
+}
+
+// Lê o DOM do editor para um array (mantém em branco; sanitiza só ao salvar)
+function collectEditorData() {
+    const arr = [];
+    document.querySelectorAll('#editorList .ebairro').forEach(el => {
+        const id = el.getAttribute('data-id') || genId();
+        const name = el.querySelector('.eb-name').value;
+        const hint = el.querySelector('.eb-hint').value;
+        const questions = [];
+        el.querySelectorAll('.equestion').forEach(qel => {
+            const question = qel.querySelector('.eq-text').value;
+            const correctEl = qel.querySelector('.eo-correct:checked');
+            const correctOi = correctEl ? parseInt(correctEl.value) : 0;
+            const options = [];
+            qel.querySelectorAll('.eopt').forEach((oel, oi) => {
+                options.push({ value: oel.querySelector('.eo-val').value, isCorrect: oi === correctOi });
+            });
+            questions.push({ question, options });
+        });
+        arr.push({ id, name, hint, questions });
+    });
+    return arr;
+}
+
+function blankQuestion() { return { question: '', options: [{ value: '', isCorrect: true }, { value: '', isCorrect: false }, { value: '', isCorrect: false }] }; }
+function blankBairro() { return { id: genId(), name: '', hint: '', questions: [blankQuestion()] }; }
+
+// Limpa/valida antes de salvar
+function sanitizeBairros(arr) {
+    const out = [];
+    arr.forEach(b => {
+        const name = (b.name || '').trim() || 'BAIRRO';
+        const hint = (b.hint || '').trim();
+        const id = b.id || genId();
+        const questions = [];
+        (b.questions || []).forEach(q => {
+            const question = (q.question || '').trim();
+            const opts = (q.options || [])
+                .map(o => ({ raw: (o.value != null ? String(o.value) : '').trim(), isCorrect: !!o.isCorrect }))
+                .filter(o => o.raw !== '');
+            if (!question || opts.length < 2) return;
+            if (!opts.some(o => o.isCorrect)) opts[0].isCorrect = true;
+            let seen = false;
+            const options = opts.map(o => {
+                const corr = o.isCorrect && !seen; if (corr) seen = true;
+                const num = Number(o.raw);
+                return { value: (o.raw !== '' && !isNaN(num)) ? num : o.raw, isCorrect: corr };
+            });
+            questions.push({ question, options });
+        });
+        if (questions.length) out.push({ id, name, hint, questions });
+    });
+    return out;
+}
+
+function openEditor() {
+    renderEditor(JSON.parse(JSON.stringify(bairros)));
+    document.getElementById('editorHint').textContent = '';
+    document.getElementById('bairroEditor').classList.remove('hidden');
+}
+
+function setupEditor() {
+    const $ = (id) => document.getElementById(id);
+    const editor = $('bairroEditor');
+
+    $('editBairrosBtn').addEventListener('click', openEditor);
+    $('closeEditorBtn').addEventListener('click', () => editor.classList.add('hidden'));
+
+    $('addBairroBtn').addEventListener('click', () => {
+        const arr = collectEditorData();
+        arr.push(blankBairro());
+        renderEditor(arr);
+    });
+
+    $('resetBairrosBtn').addEventListener('click', () => {
+        if (!confirm('Restaurar os bairros e cálculos padrão? As mudanças atuais serão perdidas.')) return;
+        renderEditor(JSON.parse(JSON.stringify(defaultBairros)));
+    });
+
+    $('saveBairrosBtn').addEventListener('click', () => {
+        const cleaned = sanitizeBairros(collectEditorData());
+        if (!cleaned.length) {
+            $('editorHint').textContent = 'Crie ao menos um bairro com um cálculo válido (mín. 2 opções).';
+            return;
+        }
+        bairros = cleaned;
+        saveBairros();
+        questionBank = buildBank();
+        editor.classList.add('hidden');
+        renderDashboard();
+    });
+
+    // Ações dinâmicas (add/remove) via delegação
+    $('editorList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-action');
+        const bi = parseInt(btn.getAttribute('data-bi'));
+        const qi = btn.hasAttribute('data-qi') ? parseInt(btn.getAttribute('data-qi')) : -1;
+        const oi = btn.hasAttribute('data-oi') ? parseInt(btn.getAttribute('data-oi')) : -1;
+        const arr = collectEditorData();
+        if (action === 'del-bairro') arr.splice(bi, 1);
+        else if (action === 'add-q') arr[bi].questions.push(blankQuestion());
+        else if (action === 'del-q') arr[bi].questions.splice(qi, 1);
+        else if (action === 'add-opt') arr[bi].questions[qi].options.push({ value: '', isCorrect: false });
+        else if (action === 'del-opt') {
+            const opts = arr[bi].questions[qi].options;
+            const wasCorrect = opts[oi] && opts[oi].isCorrect;
+            opts.splice(oi, 1);
+            if (wasCorrect && opts.length && !opts.some(o => o.isCorrect)) opts[0].isCorrect = true;
+        }
+        renderEditor(arr);
     });
 }
 
@@ -1518,5 +1732,6 @@ function setupAuth() {
 
 setupUI();
 setupAuth();
+setupEditor();
 showSplash();
 loop();
